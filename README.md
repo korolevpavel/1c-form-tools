@@ -37,11 +37,27 @@
 - **pack_form_modules.py** — упаковывает `Module.bsl` обратно в `Form.bin` через v8unpack
 - **pre-commit hook** — автоматически вызывает pack при коммите
 
+## Лицензия
+
+[MIT](LICENSE)
+
 ## Требования
 
 - Python 3.10+
 - Git
-- `pip install v8unpack`
+
+### Зависимости
+
+| Пакет | Назначение | Лицензия |
+|-------|-----------|----------|
+| [v8unpack](https://github.com/saby-integration/v8unpack) | Распаковка/сборка контейнеров 1С (Form.bin) | MIT |
+| [tqdm](https://github.com/tqdm/tqdm) | Прогресс-бары (транзитивная зависимость v8unpack) | MIT/MPL |
+
+Установка:
+
+```
+pip install v8unpack
+```
 
 ## Установка в свой проект
 

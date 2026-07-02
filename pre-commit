@@ -50,12 +50,13 @@ for BSL_FILE in $CHANGED_BSL; do
     if [ -f "$FULL_BIN_PATH" ]; then
         echo "[pre-commit]   ${BSL_FILE}"
 
-        # Вызываем pack для директории формы
-        if "$PYTHON" "$PACK_SCRIPT" "$FULL_BSL_DIR" --no-backup 2>&1 | grep -v "^INFO:"; then
-            :
-        fi
+        # Вызываем pack для директории формы; статус сохраняем ДО фильтрации
+        # вывода (проверка PIPESTATUS после if затиралась телом ветки)
+        PACK_STATUS=0
+        PACK_OUTPUT=$("$PYTHON" "$PACK_SCRIPT" "$FULL_BSL_DIR" --no-backup 2>&1) || PACK_STATUS=$?
+        echo "$PACK_OUTPUT" | grep -v "^INFO:" || true
 
-        if [ ${PIPESTATUS[0]} -ne 0 ]; then
+        if [ $PACK_STATUS -ne 0 ]; then
             echo "[pre-commit]   ✗ ОШИБКА упаковки"
             ERRORS=1
         else

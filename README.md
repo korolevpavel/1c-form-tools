@@ -31,10 +31,11 @@
  └───────────┘
 ```
 
-Два Python-скрипта + Git pre-commit hook:
+Три Python-скрипта + Git pre-commit hook:
 
 - **extract_form_modules.py** — распаковывает `Form.bin` через v8unpack, извлекает модуль в `Module.bsl`
 - **pack_form_modules.py** — упаковывает `Module.bsl` обратно в `Form.bin` через v8unpack
+- **epf_module_tools.py** — извлекает модуль объекта и модули всех обычных форм напрямую из `.epf`, когда XML-выгрузки нет (см. [ниже](#работа-напрямую-с-epf-без-xml-выгрузки))
 - **pre-commit hook** — автоматически вызывает pack при коммите
 
 ## Лицензия
@@ -124,6 +125,52 @@ Pre-commit hook автоматически:
 
 В конфигураторе: **Файл -> Открыть...** -> выбрать XML файл из каталога `src/`
 
+## Работа напрямую с .epf (без XML-выгрузки)
+
+Основной рабочий процесс выше требует XML-выгрузку из конфигуратора. Если её нет —
+есть только сам файл внешней обработки — модули можно править прямо в `.epf`
+скриптом **epf_module_tools.py**. Извлекаются **модуль объекта** и модули **всех
+обычных форм**; бинарник и тексты хранятся раздельно — путь к каталогу исходников
+передаётся параметром:
+
+```cmd
+:: 1. Извлечь модули в каталог исходников
+python epf_module_tools.py extract bin\Обработка.epf src\Обработка
+```
+
+Результат — каталог исходников рядом НЕ с бинарником:
+
+```
+bin/
+└── Обработка.epf               <- собранный бинарник (после pack готов к открытию в 1С)
+src/
+└── Обработка/
+    ├── ObjectModule.bsl        <- модуль объекта (если он не пуст)
+    ├── Форма.Module.bsl        <- модуль обычной формы «Форма»
+    └── ДругаяФорма.Module.bsl  <- ...по файлу на каждую форму
+```
+
+```cmd
+:: 2. Отредактировать .bsl любым редактором
+
+:: 3. Упаковать обратно (рядом с .epf останется бэкап .epf.bak)
+python epf_module_tools.py pack bin\Обработка.epf src\Обработка
+```
+
+При упаковке соответствие определяется по именам файлов: `ObjectModule.bsl` и
+`<ИмяФормы>.Module.bsl` (имена форм скрипт берёт из метаданных внутри `.epf`).
+Файлы, которым не нашлось модуля в контейнере, пропускаются с предупреждением.
+
+Ограничения:
+
+- правятся только тексты модулей — разметку форм, реквизиты и т.п. по-прежнему
+  редактируют в конфигураторе;
+- если модуль объекта в `.epf` пуст, 1С не хранит его в контейнере — упаковать
+  `ObjectModule.bsl` в такую обработку нельзя (сначала создайте пустой модуль
+  объекта в конфигураторе и пересохраните `.epf`);
+- pre-commit hook на `.epf` не распространяется (он ищет пары `Form.bin` + `Module.bsl`) —
+  после правки `.bsl` упаковку запускать вручную.
+
 ## Параметры скриптов
 
 ### extract_form_modules.py
@@ -146,6 +193,18 @@ python pack_form_modules.py <каталог> [--no-backup] [--verbose]
   --verbose   Подробный вывод
 ```
 
+### epf_module_tools.py
+
+```
+python epf_module_tools.py <команда> <файл.epf> <каталог> [--force] [--no-backup]
+
+  команда     extract — извлечь модули из .epf в каталог исходников
+              pack    — упаковать .bsl из каталога исходников обратно в .epf
+  каталог     Каталог исходников: ObjectModule.bsl, <ИмяФормы>.Module.bsl
+  --force     extract: перезаписать существующие .bsl
+  --no-backup pack: не создавать .epf.bak
+```
+
 ## Интеграция с Claude Code
 
 В каталоге `.claude/skills/` находятся скиллы для Claude Code:
@@ -165,12 +224,30 @@ python pack_form_modules.py <каталог> [--no-backup] [--verbose]
 
 ### Как работают скрипты
 
-Оба скрипта используют `v8unpack` (`container_reader` / `container_writer`):
+Все скрипты используют `v8unpack` (`container_reader` / `container_writer`):
 
 1. **Extract**: `container_reader.extract(Form.bin, temp_dir)` -> находит файл `module` -> сохраняет как `Module.bsl`
 2. **Pack**: `container_reader.extract(Form.bin, temp_dir)` -> заменяет `module` содержимым `Module.bsl` -> `container_writer.build(temp_dir, Form.bin)`
 
-Данные внутри контейнера хранятся без сжатия (`deflate=False`, `nested=True`).
+Данные внутри `Form.bin` хранятся без сжатия (`deflate=False`, `nested=True`).
+
+### Формат .epf (epf_module_tools.py)
+
+`.epf` — тоже контейнер 1С, но данные в нём **сжаты deflate**. Внутри (соответствие
+имён — из `v8unpack/MetaDataObject/DataProcessor.py`):
+
+- `root` — указатель на корневой GUID обработки;
+- `<корневой-guid>` — метаданные обработки, `<корневой-guid>.0` — **текст модуля
+  объекта** (если модуль пуст — файла нет);
+- `<guid-формы>` — метаданные формы (в т.ч. её имя), `<guid-формы>.0` — вложенный
+  контейнер обычной формы (внутри — те же `form` и `module`, что и в `Form.bin`).
+
+Поэтому вместо прямого `build` используется полный конвейер v8unpack, как при сборке
+`.epf` самой библиотекой:
+
+1. **Extract**: `container_reader.extract(.epf, temp_dir, deflate=True, recursive=True)`
+2. **Pack**: замена `module`/`<guid>.0` -> `container_writer.compress_and_build(src, packed)` (дожатие
+   deflate, вложенные каталоги собираются в контейнеры) -> `container_writer.build(packed, .epf, nested=True)`
 
 ## Структура проекта
 
@@ -178,6 +255,7 @@ python pack_form_modules.py <каталог> [--no-backup] [--verbose]
 1c-form-tools/
 ├── extract_form_modules.py       <- извлечение Module.bsl из Form.bin
 ├── pack_form_modules.py          <- упаковка Module.bsl обратно в Form.bin
+├── epf_module_tools.py           <- extract/pack модулей (объекта и форм) напрямую из .epf
 ├── pre-commit                    <- Git hook (авто-pack при коммите)
 ├── .claude/skills/               <- скиллы для Claude Code
 │   ├── 1c-form-extract/SKILL.md

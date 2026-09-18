@@ -18,7 +18,7 @@ description: Извлечение модулей обычных форм 1С и�
 ## Команда
 
 ```cmd
-python .1c-tools/extract_form_modules.py <каталог> [--force] [--verbose]
+bash .1c-tools/run-python .1c-tools/extract_form_modules.py <каталог> [--force] [--verbose]
 ```
 
 **Параметры:**
@@ -30,13 +30,13 @@ python .1c-tools/extract_form_modules.py <каталог> [--force] [--verbose]
 
 ```cmd
 # Извлечь модули (пропустить существующие)
-python .1c-tools/extract_form_modules.py src
+bash .1c-tools/run-python .1c-tools/extract_form_modules.py src
 
 # Извлечь с перезаписью
-python .1c-tools/extract_form_modules.py src --force
+bash .1c-tools/run-python .1c-tools/extract_form_modules.py src --force
 
 # Подробный вывод
-python .1c-tools/extract_form_modules.py src --force --verbose
+bash .1c-tools/run-python .1c-tools/extract_form_modules.py src --force --verbose
 ```
 
 ## Результат
@@ -53,7 +53,7 @@ src/
 ## Рабочий процесс
 
 1. Сохранить обработку из конфигуратора: **Файл → Сохранить как... → Файлы XML**
-2. Запустить извлечение: `python .1c-tools/extract_form_modules.py src --force`
+2. Запустить извлечение: `bash .1c-tools/run-python .1c-tools/extract_form_modules.py src --force`
 3. Редактировать `Module.bsl` файлы
 4. Упаковать обратно: `/1c-form-pack`
 5. Загрузить в конфигуратор: **Файл → Открыть...**
@@ -61,5 +61,17 @@ src/
 ## Требования
 
 ```cmd
-pip install v8unpack
+bash .1c-tools/run-python -c "import v8unpack"
 ```
+
+## Окружение проекта
+
+Команды выполняются из корня целевого проекта через Bash (Git Bash на Windows).
+Скрипты, `run-python` и зависимости должны быть установлены по README репозитория.
+Launcher и pre-commit используют одинаковый Python: явный `PYTHON`, проектный
+`.1c-tools/.venv` (bin/python или Scripts/python.exe), затем Python >= 3.10 из PATH.
+Активация venv не нужна. Если зависимости отсутствуют, выполните команду установки,
+указанную launcher, через выбранный интерпретатор. Не устанавливайте их в другой Python.
+Замените `src` фактическим каталогом XML-выгрузки; для одной формы используйте её каталог.
+
+`--force` перезаписывает существующие модули; используйте только когда это нужно задаче.

@@ -1,0 +1,5 @@
+pre-commit text eol=lf
+run-python text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf

@@ -54,29 +54,89 @@
 | [v8unpack](https://github.com/saby-integration/v8unpack) | Распаковка/сборка контейнеров 1С (Form.bin) | MIT |
 | [tqdm](https://github.com/tqdm/tqdm) | Прогресс-бары (транзитивная зависимость v8unpack) | MIT/MPL |
 
-Установка:
-
-```
-pip install v8unpack
-```
-
 ## Установка в свой проект
 
-Скопировать скрипты и hook в целевой репозиторий:
+Скопируйте `extract_form_modules.py`, `pack_form_modules.py`, `epf_module_tools.py`,
+`run-python` и `requirements.txt` в `.1c-tools` целевого проекта. Команды ниже
+выполняются из корня проекта; замените путь к скачанному репозиторию своим.
 
-```cmd
-mkdir <ваш-проект>\.1c-tools
-copy extract_form_modules.py <ваш-проект>\.1c-tools\
-copy pack_form_modules.py    <ваш-проект>\.1c-tools\
-copy pre-commit              <ваш-проект>\.git\hooks\pre-commit
+### macOS / Linux
+
+```sh
+mkdir -p .1c-tools
+cp /path/to/1c-form-tools/{extract_form_modules.py,pack_form_modules.py,epf_module_tools.py,run-python,requirements.txt} .1c-tools/
+python3 -m venv .1c-tools/.venv
+.1c-tools/.venv/bin/python -m pip install -r .1c-tools/requirements.txt
 ```
 
-Для корректной работы хука с кириллическими путями:
+### Windows (PowerShell)
 
-```cmd
-cd <ваш-проект>
-git config core.quotePath false
+Требуется Git for Windows с Git Bash. Сами Python-скрипты можно запускать
+из PowerShell; общий launcher и Git-хук выполняются через Git Bash.
+
+```powershell
+New-Item -ItemType Directory -Force .1c-tools
+Copy-Item C:/path/to/1c-form-tools/extract_form_modules.py,C:/path/to/1c-form-tools/pack_form_modules.py,C:/path/to/1c-form-tools/epf_module_tools.py,C:/path/to/1c-form-tools/run-python,C:/path/to/1c-form-tools/requirements.txt .1c-tools/
+py -3 -m venv .1c-tools/.venv
+.1c-tools/.venv/Scripts/python.exe -m pip install -r .1c-tools/requirements.txt
 ```
+
+Используйте Python 3.10 или новее. Добавьте `.1c-tools/.venv/`,
+`.1c-tools/__pycache__/` и `*.bin.bak` в `.gitignore` целевого проекта.
+Глобальная установка пакетов и активация venv не требуются.
+
+### Подключение Git-хука
+
+Проверьте `git config --get core.hooksPath` и `git rev-parse --git-path hooks`.
+Если pre-commit уже существует, объедините вызовы вручную; не перезаписывайте
+его. Для обычного клона без `core.hooksPath` и без существующего pre-commit:
+
+```sh
+# macOS/Linux или Git Bash; из корня целевого проекта
+cp /path/to/1c-form-tools/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+Сохраняйте `pre-commit` и `run-python` с LF, включая Windows. В этом репозитории
+это закреплено в `.gitattributes`; при добавлении скриптов в другой Git-репозиторий
+добавьте там правила `.1c-tools/run-python text eol=lf` и правило для хранимой копии
+хука. Пути с пробелами и кириллицей поддерживаются без изменения `core.quotePath`.
+
+### Один Python для CLI, навыков и хука
+
+В macOS/Linux и Git Bash используйте:
+
+```sh
+bash .1c-tools/run-python .1c-tools/extract_form_modules.py src
+bash .1c-tools/run-python .1c-tools/pack_form_modules.py src
+```
+
+`run-python` выбирает интерпретатор в следующем порядке:
+
+1. Явный `PYTHON` (путь к исполняемому файлу, без аргументов).
+2. Проектный `.1c-tools/.venv/bin/python` либо `.1c-tools/.venv/Scripts/python.exe`.
+3. Подходящий Python из PATH: `python3`, затем `python`.
+
+Проверяются Python >= 3.10 и импорт v8unpack. Ошибочный явный `PYTHON` или
+неисправный venv не подменяются другим окружением. На Windows для `PYTHON`
+используйте путь с `/`, например `C:/Program Files/Python/python.exe`.
+
+```sh
+PYTHON="/path with spaces/python" bash .1c-tools/run-python .1c-tools/extract_form_modules.py src
+```
+
+Хук использует тот же launcher без активации venv; IDE достаточно уметь запускать
+Git и Bash. При отсутствии интерпретатора и при отсутствии v8unpack выводятся
+разные сообщения. Для управляемых форм без соседнего Form.bin Python не требуется.
+
+### Установка навыков
+
+Скопируйте каталоги `.claude/skills/1c-form-extract` и `.claude/skills/1c-form-pack`
+в каталог навыков своего агента: например, `.claude/skills` целевого проекта для
+Claude Code или `$CODEX_HOME/skills` (обычно `~/.codex/skills`) для Codex.
+Навыки используют скрипты `.1c-tools` относительно корня **целевого проекта**;
+копирования одного SKILL.md недостаточно. Укажите агенту фактический каталог
+XML-выгрузки вместо `src`.
 
 ## Рабочий процесс
 
@@ -87,7 +147,7 @@ git config core.quotePath false
 ### 2. Извлечение модулей обычных форм
 
 ```cmd
-python .1c-tools\extract_form_modules.py src --force
+bash .1c-tools/run-python .1c-tools/extract_form_modules.py src --force
 ```
 
 Результат — рядом с каждым `Form.bin` появится `Module.bsl`:
@@ -262,3 +322,25 @@ python epf_module_tools.py <команда> <файл.epf> <каталог> [--f
 │   └── 1c-form-pack/SKILL.md
 └── README.md
 ```
+
+## Формат извлечённого модуля и проверки
+
+Извлечённый `Module.bsl` нормализуется в UTF-8 с одним BOM и CRLF.
+CRLF, LF и одиночный CR на входе не создают дополнительных пустых строк;
+наличие завершающего перевода строки сохраняется. Бинарный контейнер не обещает
+побайтового совпадения после пересборки.
+
+Хук читает рабочую копию: включите все изменения пары Module.bsl / Form.bin
+в индекс. Частично добавленные пары блокируют коммит до упаковки.
+
+```sh
+python -m pip install -r requirements.txt
+python -m unittest discover -s tests -v
+```
+
+В Windows тесты требуют Git Bash (при необходимости задайте
+`FORM_TOOLS_TEST_BASH=C:/Program Files/Git/bin/bash.exe`). GitHub Actions запускает
+тесты на Windows, macOS и Linux с Python 3.10 и 3.14. Используются синтетические
+контейнеры без прикладных данных: проверяются текст модуля, сохранность другого
+ресурса, выбор Python и настоящий Git-коммит через хук. Проверка открытия формы
+в платформе 1С выполняется отдельно и не заменяется этим CI.

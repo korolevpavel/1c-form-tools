@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Shared interpreter selection for the CLI, skills and Git hook (Git Bash on Windows).
+set -e
+TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+fail() { echo "[1c-form-tools] $*" >&2; exit 1; }
+if [ "${PYTHON+x}" = x ]; then
+    [ -n "$PYTHON" ] || fail 'PYTHON is empty; set it to a Python executable path.'
+    interpreter="$PYTHON"
+elif [ -f "$TOOLS_DIR/.venv/bin/python" ]; then
+    interpreter="$TOOLS_DIR/.venv/bin/python"
+elif [ -f "$TOOLS_DIR/.venv/Scripts/python.exe" ]; then
+    interpreter="$TOOLS_DIR/.venv/Scripts/python.exe"
+else
+    interpreter=''
+    for candidate in python3 python; do
+        if command -v "$candidate" >/dev/null 2>&1 &&
+           "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 10))' >/dev/null 2>&1; then
+            interpreter="$candidate"
+            break
+        fi
+    done
+    [ -n "$interpreter" ] || fail 'Python >= 3.10 not found in PATH. Create .1c-tools/.venv or set PYTHON.'
+fi
+
+"$interpreter" -c 'import sys' >/dev/null 2>&1 ||
+    fail "Cannot run Python: $interpreter. Check PYTHON or recreate the project venv."
+"$interpreter" -c 'import sys; sys.exit(sys.version_info < (3, 10))' >/dev/null 2>&1 ||
+    fail "Python >= 3.10 required: $interpreter"
+"$interpreter" -c 'import v8unpack' >/dev/null 2>&1 ||
+    fail "v8unpack is unavailable in $interpreter. Install with: \"$interpreter\" -m pip install -r \"$TOOLS_DIR/requirements.txt\""
+exec "$interpreter" "$@"

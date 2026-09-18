@@ -22,7 +22,7 @@ cd "$REPO_ROOT"
 MODULES=()
 while IFS= read -r -d '' file; do
     case "$file" in
-        */Module.bsl)
+        */[Mm][Oo][Dd][Uu][Ll][Ee].[Bb][Ss][Ll])
             if [ -f "$(dirname "$file")/Form.bin" ]; then
                 MODULES+=("$file")
             fi

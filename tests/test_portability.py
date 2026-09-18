@@ -83,6 +83,45 @@ class HookTests(unittest.TestCase):
         self.assertEqual(payloads(self.form / 'Form.bin')['0/module'], changed)
         self.assertEqual(self.git('status', '--porcelain', '--', 'Forms').stdout, '')
 
+    def test_real_commit_packs_case_variant_module_names(self):
+        self.env['PYTHON'] = sys.executable
+        self.git('rm', '--cached', '-r', 'Forms')
+        (self.form / 'Module.bsl').unlink()
+        for index, name in enumerate(['module.bsl', 'MODULE.BSL', 'mOdUlE.BsL']):
+            with self.subTest(name=name):
+                folder = self.repo / 'Forms' / str(index) / 'Ext'
+                make_form(folder, '// Original\r\n')
+                changed = b'\xef\xbb\xbf' + ('// ' + name + '\r\n').encode('utf-8')
+                (folder / name).write_bytes(changed)
+                self.git('add', str(folder.relative_to(self.repo)))
+                self.git('commit', '-qm', 'Pack case variant')
+                self.assertEqual(payloads(folder / 'Form.bin')['0/module'], changed)
+
+    def test_incomplete_project_venv_does_not_fall_back(self):
+        (self.tools / '.venv').mkdir()
+        self.env['PATH'] = str(Path(sys.executable).parent) + os.pathsep + self.env['PATH']
+        before = (self.form / 'Form.bin').read_bytes()
+        result = self.hook()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('project venv', result.stderr)
+        self.assertEqual((self.form / 'Form.bin').read_bytes(), before)
+
+    def test_broken_project_python_symlink_does_not_fall_back(self):
+        folder = self.tools / '.venv/bin'
+        folder.mkdir(parents=True)
+        try:
+            (folder / 'python').symlink_to(self.repo / 'deleted-python')
+        except OSError as error:
+            if os.name != 'nt':
+                raise
+            self.skipTest(f'Windows symlink privilege unavailable: {error}')
+        self.env['PATH'] = str(Path(sys.executable).parent) + os.pathsep + self.env['PATH']
+        before = (self.form / 'Form.bin').read_bytes()
+        result = self.hook()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('project venv', result.stderr)
+        self.assertEqual((self.form / 'Form.bin').read_bytes(), before)
+
     def test_project_venv_without_activation(self):
         path = self.tools / '.venv'
         venv.EnvBuilder(with_pip=False, system_site_packages=True).create(path)
@@ -96,6 +135,10 @@ class HookTests(unittest.TestCase):
         dependency_dirs = {str(Path(m.__file__).resolve().parent.parent) for m in (v8unpack, tqdm)}
         (Path(site_dir) / 'test-dependencies.pth').write_text('\n'.join(dependency_dirs) + '\n', encoding='utf-8')
         self.env.pop('VIRTUAL_ENV', None)
+        selected = subprocess.run([self.bash, str(self.tools / 'run-python'), '-c',
+            'import sys; print(sys.prefix)'], cwd=self.repo, env=self.env,
+            capture_output=True, text=True, encoding='utf-8', check=True)
+        self.assertEqual(Path(selected.stdout.strip()).resolve(), path.resolve())
         result = self.hook()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 

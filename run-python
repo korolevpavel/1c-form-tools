@@ -7,10 +7,15 @@ fail() { echo "[1c-form-tools] $*" >&2; exit 1; }
 if [ "${PYTHON+x}" = x ]; then
     [ -n "$PYTHON" ] || fail 'PYTHON is empty; set it to a Python executable path.'
     interpreter="$PYTHON"
-elif [ -f "$TOOLS_DIR/.venv/bin/python" ]; then
-    interpreter="$TOOLS_DIR/.venv/bin/python"
-elif [ -f "$TOOLS_DIR/.venv/Scripts/python.exe" ]; then
-    interpreter="$TOOLS_DIR/.venv/Scripts/python.exe"
+elif [ -e "$TOOLS_DIR/.venv" ] || [ -L "$TOOLS_DIR/.venv" ]; then
+    # An existing but damaged environment must not silently use a different Python.
+    if [ -f "$TOOLS_DIR/.venv/bin/python" ] || [ -L "$TOOLS_DIR/.venv/bin/python" ]; then
+        interpreter="$TOOLS_DIR/.venv/bin/python"
+    elif [ -f "$TOOLS_DIR/.venv/Scripts/python.exe" ] || [ -L "$TOOLS_DIR/.venv/Scripts/python.exe" ]; then
+        interpreter="$TOOLS_DIR/.venv/Scripts/python.exe"
+    else
+        fail "Broken project venv: $TOOLS_DIR/.venv. Recreate it or explicitly set PYTHON."
+    fi
 else
     interpreter=''
     for candidate in python3 python; do

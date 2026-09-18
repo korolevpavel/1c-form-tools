@@ -126,7 +126,8 @@ def process_directory(root_dir: str, force: bool = False) -> dict:
                 module_text = ""
 
             with open(bsl_path, 'w', encoding='utf-8-sig', newline='\r\n') as f:
-                f.write(module_text)
+                # Normalize first: translating existing CRLF would produce CRCRLF.
+                f.write(module_text.replace('\r\n', '\n').replace('\r', '\n'))
 
             logger.info(f"  ✓ {len(module_text)} символов → Module.bsl")
             stats['extracted'] += 1
